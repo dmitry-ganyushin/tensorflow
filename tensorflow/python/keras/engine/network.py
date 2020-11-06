@@ -45,6 +45,7 @@ from tensorflow.python.keras.engine import input_layer as input_layer_module
 from tensorflow.python.keras.engine import node as node_module
 from tensorflow.python.keras.engine import training_utils
 from tensorflow.python.keras.saving import hdf5_format
+from tensorflow.python.keras.saving import bp_format
 from tensorflow.python.keras.saving import save
 from tensorflow.python.keras.saving.saved_model import network_serialization
 from tensorflow.python.keras.utils import generic_utils
@@ -72,6 +73,11 @@ try:
   import h5py
 except ImportError:
   h5py = None
+
+try:
+  import adios2
+except ImportError:
+  adios2 = None
 
 try:
   import yaml
@@ -1112,9 +1118,12 @@ class Network(base_layer.Layer):
     """
     self._assert_weights_created()
     filepath_is_h5 = _is_hdf5_filepath(filepath)
+    filepath_is_bp = _is_adios2_filepath(filepath)
     if save_format is None:
       if filepath_is_h5:
         save_format = 'h5'
+      elif filepath_is_bp:
+        save_format = 'bp'
       else:
         save_format = 'tf'
     else:
@@ -1123,6 +1132,8 @@ class Network(base_layer.Layer):
         save_format = 'tf'
       elif user_format in ('hdf5', 'h5', 'keras'):
         save_format = 'h5'
+      elif user_format == 'bp':
+        save_format = 'bp'
       else:
         raise ValueError(
             'Unknown format "%s". Was expecting one of {"tf", "h5"}.' % (
@@ -1137,6 +1148,9 @@ class Network(base_layer.Layer):
     if save_format == 'h5' and h5py is None:
       raise ImportError(
           '`save_weights` requires h5py when saving in hdf5.')
+    if save_format == 'bp' and adios2 is None:
+      raise ImportError(
+          '`save_weights` requires adios2 when saving in hdf5.')
     if save_format == 'tf':
       check_filepath = filepath + '.index'
     else:
@@ -1149,6 +1163,9 @@ class Network(base_layer.Layer):
     if save_format == 'h5':
       with h5py.File(filepath, 'w') as f:
         hdf5_format.save_weights_to_hdf5_group(f, self.layers)
+    elif save_format == 'bp':
+        with adios2.open(filepath, 'w') as f:
+          bp_format.save_weights_to_adios2(f, "/model_weights", self.layers)
     else:
       if context.executing_eagerly():
         session = None
@@ -1615,6 +1632,9 @@ class Network(base_layer.Layer):
 def _is_hdf5_filepath(filepath):
   return (filepath.endswith('.h5') or filepath.endswith('.keras') or
           filepath.endswith('.hdf5'))
+
+def _is_adios2_filepath(filepath):
+  return filepath.endswith('.bp')
 
 
 def _make_node_key(layer_name, node_index):

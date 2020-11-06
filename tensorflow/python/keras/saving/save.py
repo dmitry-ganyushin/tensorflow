@@ -25,6 +25,7 @@ import six
 
 from tensorflow.python import tf2
 from tensorflow.python.keras.saving import hdf5_format
+from tensorflow.python.keras.saving import bp_format
 from tensorflow.python.keras.saving.saved_model import load as saved_model_load
 from tensorflow.python.keras.saving.saved_model import save as saved_model_save
 from tensorflow.python.keras.utils import generic_utils
@@ -38,6 +39,11 @@ try:
   import h5py
 except ImportError:
   h5py = None
+
+try:
+  import adios2
+except ImportError:
+  adios2 = None
 # pylint: enable=g-import-not-at-top
 
 _HDF5_EXTENSIONS = ['.h5', '.hdf5', '.keras']
@@ -112,12 +118,14 @@ def save_model(model,
   """
   from tensorflow.python.keras.engine import sequential  # pylint: disable=g-import-not-at-top
 
-  default_format = 'tf' if tf2.enabled() else 'h5'
-  save_format = save_format or default_format
+  #default_format = 'tf' if tf2.enabled() else 'h5'
+  #save_format = save_format or default_format
 
   if sys.version_info >= (3, 4) and isinstance(filepath, pathlib.Path):
     filepath = str(filepath)
 
+  #import pdb
+  #pdb.set_trace()
   if (save_format == 'h5' or
       (h5py is not None and isinstance(filepath, h5py.File)) or
       os.path.splitext(filepath)[1] in _HDF5_EXTENSIONS):
@@ -133,6 +141,8 @@ def save_model(model,
           'or using `save_weights`.')
     hdf5_format.save_model_to_hdf5(
         model, filepath, overwrite, include_optimizer)
+  elif save_format == 'bp' and adios2 is not None or os.path.splitext(filepath)[1] == ".bp":
+      bp_format.save_model_to_adios2(model, filepath, overwrite, include_optimizer)
   else:
     saved_model_save.save(model, filepath, overwrite, include_optimizer,
                           signatures, options)
